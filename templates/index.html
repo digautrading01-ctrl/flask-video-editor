@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flask Video Editor</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Flask Video Editor</h1>
+    <p class="subtitle">Powered by FFmpeg</p>
+
+    <!-- Upload -->
+    <section class="card" id="upload-section">
+      <h2>1. Upload Video</h2>
+      <input type="file" id="videoFile" accept="video/*" />
+      <button id="uploadBtn" class="btn primary">Upload</button>
+      <div id="uploadStatus" class="status"></div>
+      <div id="videoInfo" class="info-box hidden"></div>
+    </section>
+
+    <!-- Split -->
+    <section class="card" id="split-section">
+      <h2>2. Split Video</h2>
+      <p class="hint">Add segments by specifying start and end timestamps (HH:MM:SS or seconds).</p>
+      <div id="segmentList"></div>
+      <button id="addSegmentBtn" class="btn secondary">+ Add Segment</button>
+      <button id="splitBtn" class="btn primary" disabled>Split</button>
+      <div id="splitStatus" class="status"></div>
+      <div id="splitResults" class="results hidden"></div>
+    </section>
+
+    <!-- Merge -->
+    <section class="card" id="merge-section">
+      <h2>3. Merge Videos</h2>
+      <p class="hint">Enter file IDs (from uploads or outputs) separated by newlines, one per line.</p>
+      <textarea id="mergeIds" rows="4" placeholder="file_id_1&#10;file_id_2&#10;file_id_3"></textarea>
+      <label>
+        <input type="radio" name="mergeSource" value="uploads" checked /> Uploads folder
+        <input type="radio" name="mergeSource" value="outputs" /> Outputs folder
+      </label>
+      <button id="mergeBtn" class="btn primary">Merge</button>
+      <div id="mergeStatus" class="status"></div>
+    </section>
+
+    <!-- Trim -->
+    <section class="card" id="trim-section">
+      <h2>4. Trim Video</h2>
+      <div class="field-row">
+        <label>Start <input type="text" id="trimStart" placeholder="00:00:05" /></label>
+        <label>End   <input type="text" id="trimEnd"   placeholder="00:01:30" /></label>
+      </div>
+      <button id="trimBtn" class="btn primary" disabled>Trim</button>
+      <div id="trimStatus" class="status"></div>
+    </section>
+
+    <!-- Extract Audio -->
+    <section class="card" id="audio-section">
+      <h2>5. Extract Audio</h2>
+      <label>Format
+        <select id="audioFormat">
+          <option value="mp3">MP3</option>
+          <option value="aac">AAC</option>
+          <option value="wav">WAV</option>
+        </select>
+      </label>
+      <button id="audioBtn" class="btn primary" disabled>Extract</button>
+      <div id="audioStatus" class="status"></div>
+    </section>
+
+    <!-- Convert -->
+    <section class="card" id="convert-section">
+      <h2>6. Convert / Resize</h2>
+      <div class="field-row">
+        <label>Format
+          <select id="convertFormat">
+            <option value="mp4">MP4</option>
+            <option value="webm">WebM</option>
+            <option value="avi">AVI</option>
+            <option value="mkv">MKV</option>
+          </select>
+        </label>
+        <label>Resolution (optional)
+          <select id="convertRes">
+            <option value="">Keep original</option>
+            <option value="1920x1080">1080p (1920×1080)</option>
+            <option value="1280x720">720p  (1280×720)</option>
+            <option value="854x480">480p  (854×480)</option>
+            <option value="640x360">360p  (640×360)</option>
+          </select>
+        </label>
+      </div>
+      <button id="convertBtn" class="btn primary" disabled>Convert</button>
+      <div id="convertStatus" class="status"></div>
+    </section>
+
+    <!-- Output files -->
+    <section class="card" id="outputs-section">
+      <h2>Output Files</h2>
+      <button id="refreshOutputsBtn" class="btn secondary">Refresh List</button>
+      <div id="outputList" class="output-list"></div>
+    </section>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
