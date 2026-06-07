@@ -12,6 +12,8 @@ A web-based video editing tool built with Python Flask and FFmpeg.
 | Trim | `POST /trim` | Trim a video to a specific time range |
 | Extract Audio | `POST /extract-audio` | Export the audio track (MP3 / AAC / WAV) |
 | Convert | `POST /convert` | Change format and/or resolution |
+| Replace Audio | `POST /replace-audio` | Strip existing audio and replace with a new track |
+| Mix Audio | `POST /merge-audio` | Blend a new audio file with the existing audio track |
 | Download | `GET /download/<folder>/<file_id>` | Download any processed file |
 | List Outputs | `GET /list-outputs` | List all generated output files |
 
@@ -123,6 +125,39 @@ Content-Type: application/json
 
 { "file_id": "abc123_video.mp4", "format": "webm", "resolution": "1280x720" }
 ```
+
+### Upload an audio file
+```
+POST /upload-audio
+Content-Type: multipart/form-data
+
+file: <audio file>
+```
+Response:
+```json
+{ "audio_id": "def456.mp3" }
+```
+Supported formats: WAV, MP3, FLAC, OGG, M4A, AAC.
+
+### Replace audio track
+```
+POST /replace-audio
+Content-Type: application/json
+
+{ "video_id": "abc123_video.mp4", "audio_id": "def456.mp3" }
+```
+Strips the original audio track and replaces it with the uploaded audio file.
+The output is trimmed to whichever input is shorter (`-shortest`).
+
+### Mix audio into video
+```
+POST /merge-audio
+Content-Type: application/json
+
+{ "video_id": "abc123_video.mp4", "audio_id": "def456.mp3", "vol": 1.0 }
+```
+Blends the new audio file with the existing video audio using FFmpeg's `amix` filter.
+`vol` controls the volume multiplier for the new audio (default `1.0`, range `0.1–5.0`).
 
 ## Notes
 

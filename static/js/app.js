@@ -35,7 +35,7 @@ async function apiFetch(path, body) {
 }
 
 function enableActionButtons(enabled) {
-  ["splitBtn", "trimBtn", "audioBtn", "convertBtn"].forEach(id => {
+  ["splitBtn", "trimBtn", "audioBtn", "convertBtn", "replaceAudioBtn", "mixAudioBtn"].forEach(id => {
     document.getElementById(id).disabled = !enabled;
   });
 }
@@ -52,8 +52,15 @@ document.getElementById("uploadBtn").addEventListener("click", async () => {
     return;
   }
 
+  // Sanitise the filename to ASCII-only to avoid a browser DOMException
+  // ("The string did not match the expected pattern") thrown by FormData
+  // when the file name contains Unicode characters (e.g. …, CJK, emoji).
+  const rawFile = fileInput.files[0];
+  const ext = rawFile.name.includes(".") ? rawFile.name.slice(rawFile.name.lastIndexOf(".")) : "";
+  const safeFile = new File([rawFile], "upload" + ext, { type: rawFile.type });
+
   const formData = new FormData();
-  formData.append("file", fileInput.files[0]);
+  formData.append("file", safeFile);
   setStatus(status, "Uploading…", "loading");
 
   try {
@@ -251,3 +258,90 @@ async function refreshOutputs() {
 
 document.getElementById("refreshOutputsBtn").addEventListener("click", refreshOutputs);
 refreshOutputs();
+
+// ── Audio upload helper ─────────────────────────────────────
+
+async function uploadAudio(fileInput, statusEl) {
+  if (!fileInput.files.length) {
+    setStatus(statusEl, "Please select an audio file first.", "err");
+    return null;
+  }
+
+  const rawFile = fileInput.files[0];
+  const ext = rawFile.name.includes(".") ? rawFile.name.slice(rawFile.name.lastIndexOf(".")) : "";
+  const safeFile = new File([rawFile], "audio" + ext, { type: rawFile.type });
+
+  const formData = new FormData();
+  formData.append("file", safeFile);
+  setStatus(statusEl, "Uploading audio…", "loading");
+
+  const res  = await fetch("/upload-audio", { method: "POST", body: formData });
+  const data = await res.json();
+  if (data.error) {
+    setStatus(statusEl, "Audio upload error: " + data.error, "err");
+    return null;
+  }
+  return data.audio_id;
+}
+
+// ── Replace Audio ───────────────────────────────────────────
+
+document.getElementById("replaceAudioBtn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("replaceAudioFile");
+  const status    = document.getElementById("replaceAudioStatus");
+
+  if (!currentFileId) { setStatus(status, "No video uploaded.", "err"); return; }
+
+  document.getElementById("replaceAudioBtn").disabled = true;
+  try {
+    const audioId = await uploadAudio(fileInput, status);
+    if (!audioId) { document.getElementById("replaceAudioBtn").disabled = false; return; }
+
+    setStatus(status, "Replacing audio track…", "loading");
+    const data = await apiFetch("/replace-audio", { video_id: currentFileId, audio_id: audioId });
+
+    if (data.error) {
+      setStatus(status, "Error: " + data.error, "err");
+    } else {
+      status.innerHTML = `Done → <a href="/download/outputs/${data.output_id}" download style="color:#60a5fa">${data.output_id}</a>`;
+      status.className = "status ok";
+    }
+  } catch (e) {
+    setStatus(status, "Request failed: " + e.message, "err");
+  }
+  document.getElementById("replaceAudioBtn").disabled = false;
+});
+
+// ── Mix Audio ───────────────────────────────────────────────
+
+document.getElementById("mixAudioVol").addEventListener("input", () => {
+  document.getElementById("mixAudioVolLabel").textContent =
+    parseFloat(document.getElementById("mixAudioVol").value).toFixed(1) + "×";
+});
+
+document.getElementById("mixAudioBtn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("mixAudioFile");
+  const status    = document.getElementById("mixAudioStatus");
+  const vol       = parseFloat(document.getElementById("mixAudioVol").value);
+
+  if (!currentFileId) { setStatus(status, "No video uploaded.", "err"); return; }
+
+  document.getElementById("mixAudioBtn").disabled = true;
+  try {
+    const audioId = await uploadAudio(fileInput, status);
+    if (!audioId) { document.getElementById("mixAudioBtn").disabled = false; return; }
+
+    setStatus(status, "Mixing audio tracks…", "loading");
+    const data = await apiFetch("/merge-audio", { video_id: currentFileId, audio_id: audioId, vol });
+
+    if (data.error) {
+      setStatus(status, "Error: " + data.error, "err");
+    } else {
+      status.innerHTML = `Done → <a href="/download/outputs/${data.output_id}" download style="color:#60a5fa">${data.output_id}</a>`;
+      status.className = "status ok";
+    }
+  } catch (e) {
+    setStatus(status, "Request failed: " + e.message, "err");
+  }
+  document.getElementById("mixAudioBtn").disabled = false;
+});

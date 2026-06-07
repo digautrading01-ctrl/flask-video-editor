@@ -13,12 +13,17 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 OUTPUT_FOLDER.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "flv", "wmv"}
+ALLOWED_AUDIO     = {"wav", "mp3", "flac", "ogg", "m4a", "aac"}
 MAX_CONTENT_LENGTH = 2 * 1024 * 1024 * 1024  # 2 GB
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def allowed_audio_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_AUDIO
 
 
 def safe_filename(filename: str) -> str:
@@ -303,6 +308,122 @@ def convert():
         args += ["-vf", f"scale={resolution}"]
     args.append(str(out_path))
 
+    ok, stderr = run_ffmpeg(args)
+    if not ok:
+        return jsonify({"error": stderr[-500:]}), 500
+
+    return jsonify({"output_id": out_path.name})
+
+
+@app.route("/upload-audio", methods=["POST"])
+def upload_audio():
+    """Upload an audio file to be used in replace-audio or merge-audio operations."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+    if not allowed_audio_file(f.filename):
+        return jsonify({"error": "File type not allowed. Supported: wav, mp3, flac, ogg, m4a, aac"}), 400
+
+    ext = f.filename.rsplit(".", 1)[1].lower()
+    save_path = UPLOAD_FOLDER / f"{uuid.uuid4().hex}.{ext}"
+    f.save(save_path)
+    return jsonify({"audio_id": save_path.name})
+
+
+@app.route("/replace-audio", methods=["POST"])
+def replace_audio():
+    """
+    Replace the audio track of a video with a new audio file.
+
+    Body (JSON):
+    {
+        "video_id": "uploaded_video_filename",
+        "audio_id": "uploaded_audio_filename"
+    }
+    """
+    data     = request.get_json(force=True)
+    video_id = (data.get("video_id") or "").strip()
+    audio_id = (data.get("audio_id") or "").strip()
+
+    if not video_id or not audio_id:
+        return jsonify({"error": "video_id and audio_id are required"}), 400
+
+    video_path = UPLOAD_FOLDER / video_id
+    audio_path = UPLOAD_FOLDER / audio_id
+    if not video_path.exists():
+        return jsonify({"error": "Video file not found"}), 404
+    if not audio_path.exists():
+        return jsonify({"error": "Audio file not found"}), 404
+
+    out_path = unique_path(OUTPUT_FOLDER, ".mp4")
+    args = [
+        "-i", str(video_path),
+        "-i", str(audio_path),
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-shortest",
+        str(out_path),
+    ]
+    ok, stderr = run_ffmpeg(args)
+    if not ok:
+        return jsonify({"error": stderr[-500:]}), 500
+
+    return jsonify({"output_id": out_path.name})
+
+
+@app.route("/merge-audio", methods=["POST"])
+def merge_audio():
+    """
+    Mix a new audio file into the existing audio track of a video.
+
+    Body (JSON):
+    {
+        "video_id": "uploaded_video_filename",
+        "audio_id": "uploaded_audio_filename",
+        "vol":      1.0   // volume multiplier for the new audio (default 1.0, range 0.1–5.0)
+    }
+    """
+    data     = request.get_json(force=True)
+    video_id = (data.get("video_id") or "").strip()
+    audio_id = (data.get("audio_id") or "").strip()
+    try:
+        vol = float(data.get("vol", 1.0))
+        vol = max(0.1, min(5.0, vol))
+    except (TypeError, ValueError):
+        vol = 1.0
+
+    if not video_id or not audio_id:
+        return jsonify({"error": "video_id and audio_id are required"}), 400
+
+    video_path = UPLOAD_FOLDER / video_id
+    audio_path = UPLOAD_FOLDER / audio_id
+    if not video_path.exists():
+        return jsonify({"error": "Video file not found"}), 404
+    if not audio_path.exists():
+        return jsonify({"error": "Audio file not found"}), 404
+
+    out_path = unique_path(OUTPUT_FOLDER, ".mp4")
+
+    if vol != 1.0:
+        filter_complex = (
+            f"[1:a]volume={vol:.2f}[a1];"
+            "[0:a][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+        )
+    else:
+        filter_complex = "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+
+    args = [
+        "-i", str(video_path),
+        "-i", str(audio_path),
+        "-filter_complex", filter_complex,
+        "-map", "0:v",
+        "-map", "[aout]",
+        "-c:v", "copy",
+        str(out_path),
+    ]
     ok, stderr = run_ffmpeg(args)
     if not ok:
         return jsonify({"error": stderr[-500:]}), 500
